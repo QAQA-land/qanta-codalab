@@ -1,4 +1,4 @@
-name: base
+name: qa
 dependencies:
   - python=3
   - pytorch=0.4.1
