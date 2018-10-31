@@ -10,5 +10,6 @@ dependencies:
   - requests
   - click
   - flask
+  - tqdm
 channels:
   - pytorch
