@@ -1,5 +1,6 @@
-name: base
+name: qa
 dependencies:
+  - python=3
   - pytorch=0.4.1
   - numpy
   - scipy
@@ -9,5 +10,6 @@ dependencies:
   - requests
   - click
   - flask
+  - tqdm
 channels:
   - pytorch
