@@ -8,6 +8,8 @@ services:
       - ./src/:/src
       - ./data/:/src/data
     command: ["bash", "run.sh"]
+    environment:
+      - "COMPOSE_CONVERT_WINDOWS_PATHS=1"
   eval:
     image: "docker.io/entilzha/quizbowl:0.1"
     volumes:
@@ -27,3 +29,4 @@ services:
       - "qb"
     environment:
       - "PYTHONUNBUFFERED=1"
+      - "COMPOSE_CONVERT_WINDOWS_PATHS=1"
