@@ -19,6 +19,7 @@ class TestSequenceFunctions(unittest.TestCase):
         self.base_test.add_sentence('this boy did something')
         self.base_test.add_sentence('I will tell you that this woman did something')
         self.base_test.add_sentence('I will tell you that This girl did something')
+        self.base_test.add_sentence('alskdfjahsldkfj')
         
         self.threshold_test.add_sentence('This man did something')
         self.threshold_test.add_sentence('this man did something')

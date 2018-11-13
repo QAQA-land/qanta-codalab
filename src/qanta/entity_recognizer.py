@@ -19,14 +19,18 @@ class ThisEntity:
         
     def get_entity(self, sentence):
         # Returns entity of sentence
-        entity = word_tokenize(self._this_regex.search(sentence).group())[1]
+        regex_return = self._this_regex.search(sentence)
+        if regex_return == None:
+            return 'UNK'
+        entity = word_tokenize(regex_return.group())[1]
         return entity
         
     def add_sentence(self, sentence):
         # Adds entity of sentence to vocab
         assert not self._finalized, 'Vocab is already finalized'
         entity = self.get_entity(sentence)
-        self._entities[entity]+=1
+        if not entity == 'UNK':
+            self._entities[entity]+=1
         
     def finalize_vocab(self):
         # Finalizes vocab for testing
