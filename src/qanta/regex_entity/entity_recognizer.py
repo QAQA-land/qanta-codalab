@@ -19,18 +19,22 @@ class ThisEntity:
         
     def get_entity(self, sentence):
         # Returns entity of sentence
-        regex_return = self._this_regex.search(sentence)
-        if regex_return == None:
+        regex_return = self._this_regex.finditer(sentence)
+        entities = []
+        for ii in regex_return:
+            entities.append(word_tokenize(ii.group())[1])
+        if entities == []:
             return 'UNK'
-        entity = word_tokenize(regex_return.group())[1]
-        return entity
+        else:
+            return entities
         
     def add_sentence(self, sentence):
         # Adds entity of sentence to vocab
         assert not self._finalized, 'Vocab is already finalized'
-        entity = self.get_entity(sentence)
-        if not entity == 'UNK':
-            self._entities[entity]+=1
+        entities = self.get_entity(sentence)
+        if not entities == 'UNK':
+            for ee in entities:
+                self._entities[ee]+=1
         
     def finalize_vocab(self):
         # Finalizes vocab for testing
@@ -43,15 +47,20 @@ class ThisEntity:
         self._final_entities = ['UNK'] + self._final_entities               
         self._finalized = True
         return len(self._final_entities)
+        
     
     def get_entity_index(self, sentence):
         # Returns index of entity (0 if UNK)
         assert self._finalized, 'Vocab not finalized'
-        sentence_entity = self.get_entity(sentence)
-        if sentence_entity not in self._final_entities:
-            return 0
+        sentence_entities = self.get_entity(sentence)
+        index_list=[]
+        if sentence_entities == []:
+            return index_list
         else:
-            return self._final_entities.index(sentence_entity)
+            for ee in sentence_entities:
+                if ee in self._final_entities:
+                   index_list.append(self._final_entities.index(ee))
+            return index_list
         
     def get_all_entities(self):
         # Returns list of all entities
