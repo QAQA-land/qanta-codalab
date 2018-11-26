@@ -4,6 +4,8 @@
 """
 from nltk.tokenize import word_tokenize
 from nltk import FreqDist
+import nltk
+nltk.download('punkt')
 import re
 
 class ThisEntity:
@@ -16,11 +18,15 @@ class ThisEntity:
         self._threshold = threshold
         self._finalized = False
         self._this_regex = re.compile('(^|\s)(t|T)his \w*')
+        self.num_entities = None
         
     def get_entity(self, sentence):
         # Returns entity of sentence
         regex_return = self._this_regex.search(sentence)
         if regex_return == None:
+            return 'UNK'
+        tokens = word_tokenize(regex_return.group())
+        if len(tokens) != 2:
             return 'UNK'
         entity = word_tokenize(regex_return.group())[1]
         return entity
@@ -42,7 +48,8 @@ class ThisEntity:
   
         self._final_entities = ['UNK'] + self._final_entities               
         self._finalized = True
-        return len(self._final_entities)
+        self.num_entities = len(self._final_entities)
+        return self.num_entities
     
     def get_entity_index(self, sentence):
         # Returns index of entity (0 if UNK)
