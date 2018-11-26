@@ -1,12 +1,5 @@
-FROM continuumio/anaconda3:5.3.0
+FROM docker.io/entilzha/quizbowl:0.1
 
-RUN apt update
-RUN apt install -y vim
-RUN pip install awscli
-
-COPY environment.yaml /
-RUN conda env update -f environment.yaml
-
-RUN mkdir /src
-RUN mkdir /src/data
-WORKDIR /src
+RUN echo ". /opt/conda/etc/profile.d/conda.sh" >> ~/.bashrc
+RUN conda activate qa
+RUN python -m nltk.downloader punkt
