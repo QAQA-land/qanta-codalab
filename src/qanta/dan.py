@@ -59,7 +59,7 @@ class DanModel(nn.Module):
         pass
 
     def forward(self, questions: List[str]):
-        print('Calling DanModel.forward with: %s ...' % questions[0])
+        log.info('Calling DanModel.forward with: %s ...' % questions[0])
         N_answers = 2
         batchsize = len(questions)
 
@@ -92,7 +92,7 @@ class DanGuesser(object):
         if CUDA:
             self.model = self.model.cuda()
 
-        # TODO print hyperparameters
+        # TODO log hyperparameters
         log.info(f'Model:\n{self.model}')
 
         self.optimizer = Adam(self.model.parameters())
@@ -134,7 +134,7 @@ class DanGuesser(object):
         epoch_start = time.time()
         for i_batch, sample_batched in enumerate(dataloader):
             if i_batch % 10000 == 0:
-                print(sample_batched['page'])
+                log.info('Example of answers: %s', sample_batched['page'])
         acc, loss = 0, 0
         epoch_end = time.time()
         return acc, loss, epoch_end - epoch_start
@@ -168,7 +168,7 @@ class DanGuesser(object):
         return guesses
 
     def save(self):
-        print('This does not save')
+        log.info('This does not save')
         pass
 
     @classmethod
