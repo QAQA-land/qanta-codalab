@@ -1,5 +1,7 @@
 import json
 import pickle
+import tempfile
+import time
 from collections import defaultdict
 from os import path
 from typing import List, Optional, Tuple
@@ -20,7 +22,6 @@ from torch.nn import functional as F
 from torch.optim import Adam, lr_scheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
-import tempfile
 
 ''' CONSTANTS '''
 MODEL_PATH = 'dan.pickle'
@@ -34,7 +35,7 @@ def create_save_model(model):
         torch.save(model.state_dict(), path)
     return save_model
 
-def get_tmp_filename(dir='./tmp'):
+def get_tmp_filename(dir='/tmp'):
     with tempfile.NamedTemporaryFile('w', delete=True, dir=dir) as f:
         file_name = f.name
 
@@ -54,6 +55,7 @@ def get_QuizbowlIter(QuizBowlDataset, batch_size=5):
 class DanModel(nn.Module):
     def __init__(self):
         super(DanModel, self).__init__()
+        self.clf = nn.Linear(10, 1)
         pass
 
     def forward(self, questions: List[str]):
@@ -74,6 +76,7 @@ class DanGuesser(object):
 
         self.i_to_ans = {0: 'Egypt', 1: 'London'}
         self.batch_size = 5
+        self.max_epochs = 1
     
     def train(self, torch_qb_data: TorchQBData) -> None:
         log.info('Loading Quiz Bowl dataset')
@@ -100,7 +103,7 @@ class DanGuesser(object):
         self.model_file = f'{temp_prefix}.pt'
         manager = TrainingManager([
             BaseLogger(log_func=log.info), TerminateOnNaN(), EarlyStopping(monitor='test_acc', patience=10, verbose=1),
-            MaxEpochStopping(100), ModelCheckpoint(create_save_model(self.model), self.model_file, monitor='test_acc')
+            MaxEpochStopping(self.max_epochs), ModelCheckpoint(create_save_model(self.model), self.model_file, monitor='test_acc')
         ])
 
         log.info('Starting training')
@@ -125,19 +128,16 @@ class DanGuesser(object):
             else:
                 self.scheduler.step(test_acc)
             epoch += 1
-
-
-        
-        print('n batches in training: ', i_batch)
+            log.info('Epoch complete: %d', epoch)
     
     def run_epoch(self, dataloader) -> None:
+        epoch_start = time.time()
         for i_batch, sample_batched in enumerate(dataloader):
-            if i_batch % 1000 == 0:
-                print('IN DATALOADER')
-                print(i_batch)
-                print(sample_batched)
-        acc, loss, time = None, None, None
-        return acc, loss, time
+            if i_batch % 10000 == 0:
+                print(sample_batched['page'])
+        acc, loss = 0, 0
+        epoch_end = time.time()
+        return acc, loss, epoch_end - epoch_start
             
     def guess(self, questions: List[str], max_n_guesses: Optional[int]):
         if len(questions) == 0:
