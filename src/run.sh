@@ -1,3 +1,3 @@
 #/usr/bin/env bash
 
-python -m qanta.tfidf_regex web
+python -m qanta.dan web
