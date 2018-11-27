@@ -7,7 +7,7 @@ from os import path
 from typing import List, Optional, Tuple
 
 import numpy as np
-
+import gensim
 import click
 import torch
 import torch.nn as nn
@@ -29,6 +29,9 @@ BUZZ_NUM_GUESSES = 10
 BUZZ_THRESHOLD = 0.3
 log = qlogging.get(__name__)
 CUDA = torch.cuda.is_available()
+
+wiki2vec = gensim.models.KeyedVectors.load_word2vec_format('embeddings/enwiki_20180420_100d.txt')
+wiki2vec_weights = torch.FloatTensor(model.vectors)
 
 def create_save_model(model):
     def save_model(path):
@@ -53,9 +56,20 @@ def get_QuizbowlIter(QuizBowlDataset, batch_size=5):
 ''' DAN '''
 
 class DanModel(nn.Module):
-    def __init__(self):
+    def __init__(self, n_classes, vocab_size, emb_dim=50,
+                 n_hidden_units=50, nn_dropout=.5, pretrained=True):
         super(DanModel, self).__init__()
+        self.vocab_size = vocab_size  # do we put this in...?
+        self.emb_dim = emb_dim
+        self.n_classes = n_classes
+        self.n_hidden_units = n_hidden_units
+        self.nn_dropout = nn_dropout
+
         self.clf = nn.Linear(10, 1)
+        if pretrained:
+            self.embeddings = nn.Embedding.from_pretrained(wiki2vec_weights)
+        else:
+            self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
         pass
 
     def forward(self, questions: List[str]):
