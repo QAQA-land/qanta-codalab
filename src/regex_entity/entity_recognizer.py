@@ -15,7 +15,7 @@ class ThisEntity:
         self._exceptions = exceptions
         self._threshold = threshold
         self._finalized = False
-        self._this_regex = re.compile('(^|\s)(t|T)his \w*')
+        self._this_regex = re.compile('(^|\s)(t|T)his \w+')
         
     def get_entity(self, sentence):
         # Returns entity of sentence
