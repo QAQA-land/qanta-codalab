@@ -39,33 +39,33 @@ class TestSequenceFunctions(unittest.TestCase):
 
 
     def test_base(self):
-        self.assertEqual(self.base_test.finalize_vocab(),5)
-        self.assertEqual(self.base_test.get_entity_index('this man'),[1])
-        self.assertEqual(self.base_test.get_entity_index('this boy'),[2])
-        self.assertEqual(self.base_test.get_entity_index('this woman'),[3])
-        self.assertEqual(self.base_test.get_entity_index('this girl'),[4])
+        self.assertEqual(self.base_test.finalize_vocab(),4)
+        self.assertEqual(self.base_test.get_entity_index('this man'),[0])
+        self.assertEqual(self.base_test.get_entity_index('this boy'),[1])
+        self.assertEqual(self.base_test.get_entity_index('this woman'),[2])
+        self.assertEqual(self.base_test.get_entity_index('this girl'),[3])
         self.assertEqual(self.base_test.get_entity_index('this person'),[])
     
     def test_multiple(self):
-        self.assertEqual(self.multple_test.finalize_vocab(),5)
-        self.assertEqual(self.multple_test.get_entity_index('this man said something to this poet'),[1, 3])
-        self.assertEqual(self.multple_test.get_entity_index('this boy said something to this poet'),[2, 3])
-        self.assertEqual(self.multple_test.get_entity_index('this woman said something to this man'),[1])
-        self.assertEqual(self.multple_test.get_entity_index('this girl'),[4])
+        self.assertEqual(self.multple_test.finalize_vocab(),4)
+        self.assertEqual(self.multple_test.get_entity_index('this man said something to this poet'),[0, 2])
+        self.assertEqual(self.multple_test.get_entity_index('this boy said something to this poet'),[1, 2])
+        self.assertEqual(self.multple_test.get_entity_index('this woman said something to this man'),[0])
+        self.assertEqual(self.multple_test.get_entity_index('this girl'),[3])
         
     def test_threshold(self):
-        self.assertEqual(self.threshold_test.finalize_vocab(),2)
-        self.assertEqual(self.threshold_test.get_entity_index('this man'),[1])
+        self.assertEqual(self.threshold_test.finalize_vocab(),1)
+        self.assertEqual(self.threshold_test.get_entity_index('this man'),[0])
         self.assertEqual(self.threshold_test.get_entity_index('this woman'),[])
         self.assertEqual(self.threshold_test.get_entity_index('this girl'),[])
         self.assertEqual(self.threshold_test.get_entity_index('this person'),[])
         
     def test_exceptions(self):
-        self.assertEqual(self.exception_test.finalize_vocab(),4)
-        self.assertEqual(self.exception_test.get_entity_index('this man'),[1])
+        self.assertEqual(self.exception_test.finalize_vocab(),3)
+        self.assertEqual(self.exception_test.get_entity_index('this man'),[0])
         self.assertEqual(self.exception_test.get_entity_index('this is'),[])
-        self.assertEqual(self.exception_test.get_entity_index('this woman'),[2])
-        self.assertEqual(self.exception_test.get_entity_index('this girl'),[3])
+        self.assertEqual(self.exception_test.get_entity_index('this woman'),[1])
+        self.assertEqual(self.exception_test.get_entity_index('this girl'),[2])
         
 if __name__ == '__main__':
     unittest.main()

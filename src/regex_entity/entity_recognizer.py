@@ -23,18 +23,14 @@ class ThisEntity:
         entities = []
         for ii in regex_return:
             entities.append(word_tokenize(ii.group())[1])
-        if entities == []:
-            return 'UNK'
-        else:
-            return entities
+        return entities
         
     def add_sentence(self, sentence):
         # Adds entity of sentence to vocab
         assert not self._finalized, 'Vocab is already finalized'
         entities = self.get_entity(sentence)
-        if not entities == 'UNK':
-            for ee in entities:
-                self._entities[ee]+=1
+        for ee in entities:
+            self._entities[ee]+=1
         
     def finalize_vocab(self):
         # Finalizes vocab for testing
@@ -44,7 +40,7 @@ class ThisEntity:
             if xx in self._final_entities:
                 self._final_entities.remove(xx)   
   
-        self._final_entities = ['UNK'] + self._final_entities               
+        self._final_entities = self._final_entities               
         self._finalized = True
         return len(self._final_entities)
         
