@@ -1,4 +1,4 @@
 #/usr/bin/env bash
 
 #python -m qanta.dan $@
-python -m qanta.dan_test run
+python -m qanta.dan_test $@

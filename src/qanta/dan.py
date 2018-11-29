@@ -16,7 +16,7 @@ from qanta import qlogging, util
 from qanta.dataset import QuizBowlDataset
 from qanta.torch import (BaseLogger, EarlyStopping, MaxEpochStopping,
                          ModelCheckpoint, TerminateOnNaN, TrainingManager)
-from qanta.torch.torch_dataset import TorchQBData
+from qanta.torch.torch_dataset import TorchQBData, OverfitDataset
 from torch.autograd import Variable
 from torch.nn import functional as F
 from torch.optim import Adam, lr_scheduler
@@ -53,10 +53,12 @@ def get_QuizbowlIter(QuizBowlDataset, batch_size=5):
 
 class DanEmbedding(nn.Module):
     def __init__(self, pretrained_fp):
-        super(DanModel, self).__init__()
+        super(DanEmbedding, self).__init__()
         self.vocab, self.stoi_, self.embedding_weights = \
             self.load_pretrained_weights(pretrained_fp)
         self.embed = nn.Embedding.from_pretrained(self.embedding_weights)
+        self.embed_dim = self.embedding_weights.shape[1]
+        self.pad_index = 0
 
     def load_pretrained_weights(self, pretrained_fp):
         wiki2vec = gensim.models.KeyedVectors.load_word2vec_format(pretrained_fp)
@@ -66,7 +68,6 @@ class DanEmbedding(nn.Module):
 
         vocab.insert(0, '<UNK>')
         vocab.insert(0, '<PAD>')
-        self.pad_index = 0
 
         unk_vec = np.mean(vectors, axis=0)
         pad_vec = np.zeros_like(vectors[0])
@@ -81,23 +82,21 @@ class DanEmbedding(nn.Module):
         else:
             return self.stoi_['<UNK>']
     
-    def forward(questions: List[List[str]]):
+    def forward(self, questions: List[List[str]]):
         return self.embed(questions)
 
 ''' DAN '''
 class DanModel(nn.Module):
-    def __init__(self, pretrained_fp,  n_classes, vocab_size=None, emb_dim=50,
-                 n_hidden_units=50, nn_dropout=.5, pretrained=True):
+    def __init__(self, embedding, embed_dim,  n_classes, n_hidden_units=50, nn_dropout=.5, pretrained=True):
         super(DanModel, self).__init__()
         log.info('loading embeddings')
 
-        self.vocab_size = vocab_size  # do we put this in...?
-        self.emb_dim = emb_dim
         self.n_classes = n_classes
         self.n_hidden_units = n_hidden_units
         self.nn_dropout = nn_dropout
-        self.embed = DanEmbedding(pretrained_fp)
-        self.linear1 = nn.Linear(emb_dim, n_hidden_units)
+        self.embedding = embedding
+        self.embed_dim = embed_dim
+        self.linear1 = nn.Linear(self.embed_dim, n_hidden_units)
         self.linear2 = nn.Linear(n_hidden_units, n_classes)
         self.softmax = nn.Softmax(dim=1)
 
@@ -114,57 +113,69 @@ class DanModel(nn.Module):
         #     self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
         # pass
     
+    def forward(self, input_text, text_len, is_prob=False):
+        """
+        Model forward pass
+        
+        Keyword arguments:
+        input_text : vectorized question text 
+        text_len : batch * 1, text length for each question
+        in_prob: if True, output the softmax of last layer
 
+        """
+        #### write the forward funtion, the output is logits 
+        x = self.embedding(input_text)
+        x = x.sum(1)
+        x /= text_len.view(x.size(0), -1)
+        x = self.classifier(x)
 
-    def forward(self, questions: List[List[str]]):
-        log.info('Calling DanModel.forward with: {} ...'.format(questions[0]))
-        qs_embedded = self.embed(questions)
-        outputs = self.clf(qs_embedded)
-        return outputs
-        # qs = self.str_batch_to_idxs(questions)
-        # log.info('%s', qs)
-        # embeds = self.embeddings(qs)
-        # log.info('%s', embeds.size())
-        # exit()
-        # N_answers = 2
-        # batchsize = len(questions)
-        # a = torch.zeros((batchsize, N_answers))
-        # a[:,0] = 1.0
-        # return a
+        if is_prob:
+            return self.softmax(x)
+        else:
+            return x
 
 class DanGuesser(object):
-    def __init__(self):
+    def __init__(self, pretrained_fp, quizbowl_dataset,
+                 batch_size=5,
+                 max_epochs=1,
+                 grad_clip=5,
+                 n_training_samples=None):
         # TODO: initialize with DAN model 
         # (Remove this once saving and dummy model is no longer needed)
-        self.model = DanModel()
-        # TODO:
+        self.dan_embed = DanEmbedding(pretrained_fp)
+        self.torch_qb_data = TorchQBData(quizbowl_dataset, 
+                                         stoi = self.dan_embed.stoi, 
+                                         pad_index=self.dan_embed.pad_index,
+                                         n_samples=n_training_samples)
+        self.model = DanModel(embedding=self.dan_embed, 
+                    embed_dim=self.dan_embed.embed_dim, 
+                    n_classes=self.torch_qb_data.n_answers)        # TODO:
 
-        self.batch_size = 5
-        self.max_epochs = 1
-    
-    def train(self, torch_qb_data: TorchQBData) -> None:
+        self.batch_size = batch_size
+        self.max_epochs = max_epochs
+        self.is_train = True
+        self.gradient_clip = grad_clip
+
+        self.optimizer = Adam(self.model.parameters(), lr=0.01)
+        self.criterion = nn.CrossEntropyLoss()
+        self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, verbose=True, mode='max')
+
+    def train(self) -> None:
         log.info('Loading Quiz Bowl dataset')
-        train_dataloader = DataLoader(torch_qb_data, batch_size = self.batch_size, shuffle=True, num_workers=1)
+        train_dataloader = DataLoader(self.torch_qb_data, 
+                                      batch_size = self.batch_size, 
+                                      shuffle=True, num_workers=1,
+                                      collate_fn=TorchQBData.collate)
         log.info(f'N Train={len(train_dataloader)}')
-        self.ans_to_i = torch_qb_data.ans_to_i
-        self.i_to_ans = torch_qb_data.i_to_ans
+
         #log.info(f'N Test={len(val_iter.dataset.examples)}')
 
-        # TODO: SET THIS 
-        self.n_classes = 2#len(self.ans_to_i)
-        self.emb_dim = 50 # TODO: set this later
-        log.info('Initializing Model')
-        self.model = DanModel()
         if CUDA:
             self.model = self.model.cuda()
 
         # TODO log hyperparameters
         log.info(f'Model:\n{self.model}')
 
-        self.optimizer = Adam(self.model.parameters())
-        self.criterion = nn.CrossEntropyLoss()
-        self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, verbose=True, mode='max')
-        
         temp_prefix = get_tmp_filename()
         self.model_file = f'{temp_prefix}.pt'
         manager = TrainingManager([
@@ -177,11 +188,11 @@ class DanGuesser(object):
         epoch = 0
         while True:
             self.model.train()
-            train_acc, train_loss, train_time = self.run_epoch(train_dataloader)
+            train_acc, train_loss, train_time = self.run_epoch(train_dataloader, is_train=True)
 
             # TODO: actually get validation set
             self.model.eval()
-            test_acc, test_loss, test_time = self.run_epoch(train_dataloader)
+            test_acc, test_loss, test_time = self.run_epoch(train_dataloader, is_train=False)
 
             stop_training, reasons = manager.instruct(
                 train_time, train_loss, train_acc,
@@ -196,15 +207,37 @@ class DanGuesser(object):
             epoch += 1
             log.info('Epoch complete: %d', epoch)
     
-    def run_epoch(self, dataloader) -> None:
+    def run_epoch(self, dataloader, is_train=True) -> None:
         epoch_start = time.time()
-        for i_batch, sample_batched in enumerate(dataloader):
-            self.model.forward(sample_batched['text'], sample_batched['page'])
-            if i_batch % 10000 == 0:
-                log.info('Example of answers: %s', sample_batched['page'])
-        acc, loss = 0, 0
+        batch_accuracies = []
+        batch_losses = []
+        for i_batch, batch in enumerate(dataloader):
+            question_text = batch['text']
+            question_len = batch['len']
+            question_labels = batch['labels']
+
+            if is_train:
+                self.model.zero_grad()
+
+            out = self.model(question_text, question_len)
+            _, preds = torch.max(out, 1)
+            accuracy = torch.mean(torch.eq(preds, question_labels).float()).item()
+            batch_loss = self.criterion(out, question_labels)
+            
+            #print(i_batch, batch_loss.item())
+
+            if is_train:
+                batch_loss.backward()
+                torch.nn.utils.clip_grad_norm(self.model.parameters(), 
+                                              self.gradient_clip)
+                self.optimizer.step()
+
+            batch_accuracies.append(accuracy)
+            batch_losses.append(batch_loss.data[0])
+
         epoch_end = time.time()
-        return acc, loss, epoch_end - epoch_start
+
+        return np.mean(batch_accuracies), np.mean(batch_losses), epoch_end - epoch_start
             
     def guess(self, questions: List[str], max_n_guesses: Optional[int]):
         if len(questions) == 0:
