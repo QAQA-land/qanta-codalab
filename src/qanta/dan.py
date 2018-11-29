@@ -30,8 +30,7 @@ BUZZ_THRESHOLD = 0.3
 log = qlogging.get(__name__)
 CUDA = torch.cuda.is_available()
 
-wiki2vec = gensim.models.KeyedVectors.load_word2vec_format('embeddings/enwiki_20180420_100d.txt')
-wiki2vec_weights = torch.FloatTensor(model.vectors)
+
 
 def create_save_model(model):
     def save_model(path):
@@ -52,34 +51,86 @@ def get_QuizbowlIter(QuizBowlDataset, batch_size=5):
     Returns iterator over batches of QuizBowl qs
     '''
 
+class DanEmbedding(nn.Module):
+    def __init__(self, pretrained_fp):
+        super(DanModel, self).__init__()
+        self.vocab, self.stoi_, self.embedding_weights = \
+            self.load_pretrained_weights(pretrained_fp)
+        self.embed = nn.Embedding.from_pretrained(self.embedding_weights)
+
+    def load_pretrained_weights(self, pretrained_fp):
+        wiki2vec = gensim.models.KeyedVectors.load_word2vec_format(pretrained_fp)
+        vectors = wiki2vec.vectors
+        vocab_len = len(vectors)
+        vocab = [wiki2vec.index2word[i] for i in range(vocab_len)]
+
+        vocab.insert(0, '<UNK>')
+        vocab.insert(0, '<PAD>')
+        self.pad_index = 0
+
+        unk_vec = np.mean(vectors, axis=0)
+        pad_vec = np.zeros_like(vectors[0])
+        vectors = np.vstack((pad_vec, unk_vec, vectors))
+        vectors = torch.FloatTensor(vectors)
+        stoi = dict((s, i) for i,s in enumerate(vocab))
+        return vocab, stoi, vectors
+    
+    def stoi(self, s):
+        if s in self.stoi_:
+            return self.stoi_[s]
+        else:
+            return self.stoi_['<UNK>']
+    
+    def forward(questions: List[List[str]]):
+        return self.embed(questions)
 
 ''' DAN '''
-
 class DanModel(nn.Module):
-    def __init__(self, n_classes, vocab_size, emb_dim=50,
+    def __init__(self, pretrained_fp,  n_classes, vocab_size=None, emb_dim=50,
                  n_hidden_units=50, nn_dropout=.5, pretrained=True):
         super(DanModel, self).__init__()
+        log.info('loading embeddings')
+
         self.vocab_size = vocab_size  # do we put this in...?
         self.emb_dim = emb_dim
         self.n_classes = n_classes
         self.n_hidden_units = n_hidden_units
         self.nn_dropout = nn_dropout
+        self.embed = DanEmbedding(pretrained_fp)
+        self.linear1 = nn.Linear(emb_dim, n_hidden_units)
+        self.linear2 = nn.Linear(n_hidden_units, n_classes)
+        self.softmax = nn.Softmax(dim=1)
 
-        self.clf = nn.Linear(10, 1)
-        if pretrained:
-            self.embeddings = nn.Embedding.from_pretrained(wiki2vec_weights)
-        else:
-            self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
-        pass
+        self.classifier = nn.Sequential(
+            nn.Dropout(p=self.nn_dropout),
+            self.linear1,
+            nn.ReLU(),
+            nn.Dropout(p=self.nn_dropout),
+            self.linear2,
+        )
+        # if pretrained:
+        #     
+        # else:
+        #     self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
+        # pass
+    
 
-    def forward(self, questions: List[str]):
-        log.info('Calling DanModel.forward with: %s ...' % questions[0])
-        N_answers = 2
-        batchsize = len(questions)
 
-        a = torch.zeros((batchsize, N_answers))
-        a[:,0] = 1.0
-        return a
+    def forward(self, questions: List[List[str]]):
+        log.info('Calling DanModel.forward with: {} ...'.format(questions[0]))
+        qs_embedded = self.embed(questions)
+        outputs = self.clf(qs_embedded)
+        return outputs
+        # qs = self.str_batch_to_idxs(questions)
+        # log.info('%s', qs)
+        # embeds = self.embeddings(qs)
+        # log.info('%s', embeds.size())
+        # exit()
+        # N_answers = 2
+        # batchsize = len(questions)
+        # a = torch.zeros((batchsize, N_answers))
+        # a[:,0] = 1.0
+        # return a
 
 class DanGuesser(object):
     def __init__(self):
@@ -88,7 +139,6 @@ class DanGuesser(object):
         self.model = DanModel()
         # TODO:
 
-        self.i_to_ans = {0: 'Egypt', 1: 'London'}
         self.batch_size = 5
         self.max_epochs = 1
     
@@ -96,6 +146,8 @@ class DanGuesser(object):
         log.info('Loading Quiz Bowl dataset')
         train_dataloader = DataLoader(torch_qb_data, batch_size = self.batch_size, shuffle=True, num_workers=1)
         log.info(f'N Train={len(train_dataloader)}')
+        self.ans_to_i = torch_qb_data.ans_to_i
+        self.i_to_ans = torch_qb_data.i_to_ans
         #log.info(f'N Test={len(val_iter.dataset.examples)}')
 
         # TODO: SET THIS 
@@ -147,6 +199,7 @@ class DanGuesser(object):
     def run_epoch(self, dataloader) -> None:
         epoch_start = time.time()
         for i_batch, sample_batched in enumerate(dataloader):
+            self.model.forward(sample_batched['text'], sample_batched['page'])
             if i_batch % 10000 == 0:
                 log.info('Example of answers: %s', sample_batched['page'])
         acc, loss = 0, 0
