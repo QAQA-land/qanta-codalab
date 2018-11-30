@@ -121,6 +121,20 @@ class QuizBowlDataset:
         self.db = QantaDatabase()
         self.guesser_train = guesser_train
         self.buzzer_train = buzzer_train
+        self.answers = self.get_answers_set()
+        self.n_answers = len(self.answers)
+
+    def get_answers_set(self):
+        training_pages = set()
+        questions = []
+        if self.guesser_train:
+            questions.extend(self.db.guess_train_questions)
+        if self.buzzer_train:
+            questions.extend(self.db.buzz_train_questions)
+
+        for q in questions:
+            training_pages.add(q.page)
+        return training_pages
 
     def training_data(self):
         training_examples = []
@@ -136,6 +150,21 @@ class QuizBowlDataset:
             training_pages.append(q.page)
 
         return training_examples, training_pages, None
+
+    def test_data(self):
+        test_examples = []
+        test_pages = []
+        questions = []
+        if self.guesser_train:
+            questions.extend(self.db.guess_test_questions)
+        if self.buzzer_train:
+            questions.extend(self.db.buzz_test_questions)
+
+        for q in questions:
+            test_examples.append(q.sentences)
+            test_pages.append(q.page)
+
+        return test_examples, test_pages, None
 
     def questions_by_fold(self):
         return {

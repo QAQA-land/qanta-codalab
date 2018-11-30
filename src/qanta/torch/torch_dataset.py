@@ -5,23 +5,34 @@ import torch
 
 
 class TorchQBData(Dataset):
-    def __init__(self, dataset: QuizBowlDataset, stoi, pad_index, n_samples=None):
+    def __init__(self, 
+                questions,
+                pages,
+                stoi_dict,
+                pad_index,
+                unk_index):
 
-        self.qs, self.pages, _ = dataset.training_data()
-        if n_samples is not None:
-            self.qs = self.qs[:n_samples]
-            self.pages = self.pages[:n_samples]
+        self.qs, self.pages = questions, pages
         self.answers = list(set(self.pages))
         self.n_answers = len(self.answers)
         self.i_to_ans = dict(enumerate(self.answers))
         self.ans_to_i = dict((n, i) for i, n in  enumerate(self.answers))
         assert(len(self.qs) == len(self.pages))
-        self.stoi = stoi
+        self.stoi_ = stoi_dict
         assert(pad_index == 0)
+        assert(stoi_dict['<PAD>'] == pad_index)
+        assert(stoi_dict['<UNK>'] == unk_index)
     
     def __len__(self):
         return(len(self.qs))
+
+    def stoi(self, s):
+        if s in self.stoi_:
+            return self.stoi_[s]
+        else:
+            return self.stoi_['<UNK>']
     
+
     def __getitem__(self, idx):
         sentences_concatenated = ' '.join(self.qs[idx])
         tokens = word_tokenize(sentences_concatenated)

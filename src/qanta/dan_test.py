@@ -12,17 +12,19 @@ def cli():
 
 @cli.command()
 def pretrained():
-    dan = DanEmbedding(pretrained_fp=PRETRAINED_FP)
-    vocab, stoi, vectors = dan.load_pretrained_weights(PRETRAINED_FP)
+    vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
+    dan = DanEmbedding(pretrained_weights=vectors)
     print('len vocab', len(vocab))
-    print(stoi)
-    print(vectors.shape)
+    #print(stoi_)
+    print('weights shape', vectors.shape)
     print(dan.embed_dim)
+
 @cli.command()
 def dataloader():
-    dan_embed = DanEmbedding(pretrained_fp=PRETRAINED_FP)    
+    vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
     dataset = QuizBowlDataset(guesser_train=True)
-    dataset = TorchQBData(dataset, stoi = dan_embed.stoi, pad_index=dan_embed.pad_index)
+    qs, pages, _ = dataset.training_data()
+    dataset = TorchQBData(qs, pages, stoi_, pad_index, unk_index)
     print('# qs', len(dataset.qs))
     print('# ans', len(dataset.answers))
     print('ans examples:', dataset.answers[:5])
@@ -33,21 +35,23 @@ def dataloader():
     for batch in train_dataloader:
         print('\n\n')
         print(batch)
-        #print(batch)
         break
 
 @cli.command()
 def forward():
-    dan_embed = DanEmbedding(pretrained_fp=PRETRAINED_FP)    
+    vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
+
     dataset = QuizBowlDataset(guesser_train=True)
-    dataset = TorchQBData(dataset, stoi = dan_embed.stoi, pad_index=dan_embed.pad_index)
+    qs, pages, _ = dataset.training_data()
+    dataset = TorchQBData(qs, pages, stoi_, pad_index, unk_index)
     print('# qs', len(dataset.qs))
     print('# ans', len(dataset.answers))
     print('ans examples:', dataset.answers[:5])
 
-    train_dataloader = DataLoader(dataset, batch_size = 2, shuffle=True, num_workers=1, 
+    train_dataloader = DataLoader(dataset, batch_size = 5, shuffle=True, num_workers=1, 
                                 collate_fn=TorchQBData.collate)
 
+    dan_embed = DanEmbedding(pretrained_weights=vectors)
     dan = DanModel(embedding=dan_embed, 
                     embed_dim=dan_embed.embed_dim, 
                     n_classes=dataset.n_answers)
@@ -60,25 +64,40 @@ def forward():
         print(out)
 
         values, indices = out.max(1)
-        print(indices)
         answers = [dataset.i_to_ans[i] for i in indices.numpy()]
-        print(answers)
-        print([dataset.i_to_ans[i] for i in labels.numpy()])
+        print('predicted', answers)
+        print('actual   ',[dataset.i_to_ans[i] for i in labels.numpy()])
         break
 
 @cli.command()
 def run():
+    vocab, stoi_, vectors, pad_index, unk_index = \
+        DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
+
     dataset = QuizBowlDataset(guesser_train=True)
-    guesser = DanGuesser(pretrained_fp=PRETRAINED_FP,
-                         quizbowl_dataset=dataset,
-                         n_training_samples=10,
-                         max_epochs=100)
-    print(guesser.torch_qb_data.n_answers)
-    train_dataloader = DataLoader(guesser.torch_qb_data, 
-                                batch_size = 20, 
-                                shuffle=True, num_workers=1,
-                                collate_fn=TorchQBData.collate)
-    guesser.train()
+    n_answers = dataset.n_answers
+    guesser = DanGuesser(pretrained_weights=vectors,
+                        n_answers = n_answers,
+                        max_epochs=100,
+                        batch_size=30,
+                        lr=0.01)
+
+    tr_qs, tr_pages, _ = dataset.training_data()
+    te_qs, te_pages, _ = dataset.test_data()
+
+    
+    # N_SAMPLE = 10
+    # tr_qs, tr_pages = tr_qs[:N_SAMPLE], tr_pages[:N_SAMPLE]
+    # te_qs, te_pages = te_qs[:N_SAMPLE], te_pages[:N_SAMPLE]
+
+    
+
+    train_dataset = TorchQBData(tr_qs, tr_pages, stoi_, pad_index, unk_index)
+    val_dataset = TorchQBData(te_qs, te_pages, stoi_, pad_index, unk_index)
+
+    guesser.train(train_dataset, val_dataset)
+    print(tr_pages)
+    print(te_pages)
 
 if __name__ == '__main__':
     cli()

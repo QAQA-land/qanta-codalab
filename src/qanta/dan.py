@@ -43,24 +43,16 @@ def get_tmp_filename(dir='/tmp'):
 
     return file_name
 
-
-''' Quizbowl dataset iterator '''
-
-def get_QuizbowlIter(QuizBowlDataset, batch_size=5):
-    '''
-    Returns iterator over batches of QuizBowl qs
-    '''
-
 class DanEmbedding(nn.Module):
-    def __init__(self, pretrained_fp):
+    def __init__(self, pretrained_weights):
         super(DanEmbedding, self).__init__()
-        self.vocab, self.stoi_, self.embedding_weights = \
-            self.load_pretrained_weights(pretrained_fp)
+        self.embedding_weights = pretrained_weights
         self.embed = nn.Embedding.from_pretrained(self.embedding_weights)
         self.embed_dim = self.embedding_weights.shape[1]
         self.pad_index = 0
-
-    def load_pretrained_weights(self, pretrained_fp):
+    
+    @staticmethod
+    def load_pretrained_weights(pretrained_fp):
         wiki2vec = gensim.models.KeyedVectors.load_word2vec_format(pretrained_fp)
         vectors = wiki2vec.vectors
         vocab_len = len(vectors)
@@ -74,14 +66,11 @@ class DanEmbedding(nn.Module):
         vectors = np.vstack((pad_vec, unk_vec, vectors))
         vectors = torch.FloatTensor(vectors)
         stoi = dict((s, i) for i,s in enumerate(vocab))
-        return vocab, stoi, vectors
+        pad_index = 0
+        unk_index = 1
+        return vocab, stoi, vectors, pad_index, unk_index
     
-    def stoi(self, s):
-        if s in self.stoi_:
-            return self.stoi_[s]
-        else:
-            return self.stoi_['<UNK>']
-    
+
     def forward(self, questions: List[List[str]]):
         return self.embed(questions)
 
@@ -101,10 +90,10 @@ class DanModel(nn.Module):
         self.softmax = nn.Softmax(dim=1)
 
         self.classifier = nn.Sequential(
-            nn.Dropout(p=self.nn_dropout),
+            #nn.Dropout(p=self.nn_dropout),
             self.linear1,
             nn.ReLU(),
-            nn.Dropout(p=self.nn_dropout),
+            #nn.Dropout(p=self.nn_dropout),
             self.linear2,
         )
         # if pretrained:
@@ -128,47 +117,52 @@ class DanModel(nn.Module):
         x = x.sum(1)
         x /= text_len.view(x.size(0), -1)
         x = self.classifier(x)
-
         if is_prob:
             return self.softmax(x)
         else:
             return x
 
 class DanGuesser(object):
-    def __init__(self, pretrained_fp, quizbowl_dataset,
+    def __init__(self, 
+                 pretrained_weights,
+                 n_answers,
                  batch_size=5,
                  max_epochs=1,
                  grad_clip=5,
-                 n_training_samples=None):
+                 n_training_samples=None,
+                 lr = 0.01,
+                 patience=100):
         # TODO: initialize with DAN model 
         # (Remove this once saving and dummy model is no longer needed)
-        self.dan_embed = DanEmbedding(pretrained_fp)
-        self.torch_qb_data = TorchQBData(quizbowl_dataset, 
-                                         stoi = self.dan_embed.stoi, 
-                                         pad_index=self.dan_embed.pad_index,
-                                         n_samples=n_training_samples)
+        self.n_answers = n_answers
+        self.dan_embed = DanEmbedding(pretrained_weights)
         self.model = DanModel(embedding=self.dan_embed, 
                     embed_dim=self.dan_embed.embed_dim, 
-                    n_classes=self.torch_qb_data.n_answers)        # TODO:
+                    n_classes=self.n_answers)
 
         self.batch_size = batch_size
         self.max_epochs = max_epochs
+        self.patience = patience
         self.is_train = True
         self.gradient_clip = grad_clip
-
-        self.optimizer = Adam(self.model.parameters(), lr=0.01)
+        self.lr = lr
+        self.optimizer = Adam(self.model.parameters(), lr=self.lr)
         self.criterion = nn.CrossEntropyLoss()
-        self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, verbose=True, mode='max')
+        self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=self.patience, verbose=True, mode='max')
 
-    def train(self) -> None:
+    def train(self, train_dataset, val_dataset) -> None:
         log.info('Loading Quiz Bowl dataset')
-        train_dataloader = DataLoader(self.torch_qb_data, 
+        train_dataloader = DataLoader(train_dataset, 
                                       batch_size = self.batch_size, 
                                       shuffle=True, num_workers=1,
                                       collate_fn=TorchQBData.collate)
-        log.info(f'N Train={len(train_dataloader)}')
+        val_dataloader = DataLoader(val_dataset, 
+                                batch_size = self.batch_size, 
+                                shuffle=True, num_workers=1,
+                                collate_fn=TorchQBData.collate)
 
-        #log.info(f'N Test={len(val_iter.dataset.examples)}')
+        log.info(f'N Train={len(train_dataloader)}')
+        log.info(f'N Test={len(val_dataloader)}')
 
         if CUDA:
             self.model = self.model.cuda()
@@ -179,8 +173,11 @@ class DanGuesser(object):
         temp_prefix = get_tmp_filename()
         self.model_file = f'{temp_prefix}.pt'
         manager = TrainingManager([
-            BaseLogger(log_func=log.info), TerminateOnNaN(), EarlyStopping(monitor='test_acc', patience=10, verbose=1),
-            MaxEpochStopping(self.max_epochs), ModelCheckpoint(create_save_model(self.model), self.model_file, monitor='test_acc')
+            BaseLogger(log_func=log.info), 
+            TerminateOnNaN(), 
+            EarlyStopping(monitor='test_acc', patience=self.patience, verbose=1),
+            MaxEpochStopping(self.max_epochs), 
+            ModelCheckpoint(create_save_model(self.model), self.model_file, monitor='test_acc')
         ])
 
         log.info('Starting training')
@@ -192,7 +189,7 @@ class DanGuesser(object):
 
             # TODO: actually get validation set
             self.model.eval()
-            test_acc, test_loss, test_time = self.run_epoch(train_dataloader, is_train=False)
+            test_acc, test_loss, test_time = self.run_epoch(val_dataloader, is_train=False)
 
             stop_training, reasons = manager.instruct(
                 train_time, train_loss, train_acc,
@@ -224,8 +221,6 @@ class DanGuesser(object):
             accuracy = torch.mean(torch.eq(preds, question_labels).float()).item()
             batch_loss = self.criterion(out, question_labels)
             
-            #print(i_batch, batch_loss.item())
-
             if is_train:
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm(self.model.parameters(), 
@@ -233,7 +228,7 @@ class DanGuesser(object):
                 self.optimizer.step()
 
             batch_accuracies.append(accuracy)
-            batch_losses.append(batch_loss.data[0])
+            batch_losses.append(batch_loss.item())
 
         epoch_end = time.time()
 
