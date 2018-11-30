@@ -2,11 +2,14 @@ from torch.utils.data import Dataset
 from qanta.dataset import QuizBowlDataset
 from nltk.tokenize import word_tokenize
 import torch
+import random
 
 
 class TorchQBData(Dataset):
-    def __init__(self, dataset: QuizBowlDataset, stoi, pad_index, n_samples=None):
+    def __init__(self, dataset: QuizBowlDataset, stoi, pad_index, n_samples=None,
+                split_sentences=False):
 
+        self.split_sentences = split_sentences
         self.qs, self.pages, _ = dataset.training_data()
         if n_samples is not None:
             self.qs = self.qs[:n_samples]
@@ -18,13 +21,28 @@ class TorchQBData(Dataset):
         assert(len(self.qs) == len(self.pages))
         self.stoi = stoi
         assert(pad_index == 0)
+
+        if split_sentences:
+            q_by_sent = []
+            p_by_sent = []
+            for i in range(len(self.qs)):
+                sentences = [s for s in self.qs[i]]
+                pages = [self.pages[i]] * len(sentences)
+                q_by_sent.extend(sentences)
+                p_by_sent.extend(pages)
+            self.qs = q_by_sent
+            self.pages = p_by_sent
+
     
     def __len__(self):
         return(len(self.qs))
     
     def __getitem__(self, idx):
-        sentences_concatenated = ' '.join(self.qs[idx])
-        tokens = word_tokenize(sentences_concatenated)
+        if self.split_sentences:
+            tokens = word_tokenize(self.qs[idx])
+        else:
+            sentences_concatenated = ' '.join(self.qs[idx])
+            tokens = word_tokenize(sentences_concatenated)
         ex = (tokens, self.pages[idx])
         return self.vectorize(ex)
 

@@ -5,7 +5,9 @@ from torch.utils.data import DataLoader
 
 import click
 
-PRETRAINED_FP = 'embeddings/50000_embeddings.txt'
+PRETRAINED_FP = 'embeddings/enwiki_20180420_100d.txt'
+#PRETRAINED_FP = 'embeddings/small_embeddings.txt'
+
 @click.group()
 def cli():
     pass
@@ -18,6 +20,26 @@ def pretrained():
     print(stoi)
     print(vectors.shape)
     print(dan.embed_dim)
+
+@cli.command()
+def sentsampler():
+    dan_embed = DanEmbedding(pretrained_fp=PRETRAINED_FP)    
+    dataset = QuizBowlDataset(guesser_train=True)
+    dataset = TorchQBData(dataset, stoi = dan_embed.stoi, pad_index=dan_embed.pad_index, 
+                            n_samples = 100, split_sentences = True)
+    print('# qs', len(dataset.qs))
+    print('# ans', len(dataset.answers))
+    print('ans examples:', dataset.answers[:5])
+
+    train_dataloader = DataLoader(dataset, batch_size = 2, shuffle=True, num_workers=1, 
+                                collate_fn=TorchQBData.collate)
+    print('* GETTING BATCHES')
+    for batch in train_dataloader:
+        print('\n\n')
+        print(batch)
+        #print(batch)
+        break
+
 @cli.command()
 def dataloader():
     dan_embed = DanEmbedding(pretrained_fp=PRETRAINED_FP)    
@@ -71,11 +93,11 @@ def run():
     dataset = QuizBowlDataset(guesser_train=True)
     guesser = DanGuesser(pretrained_fp=PRETRAINED_FP,
                          quizbowl_dataset=dataset,
-                         n_training_samples=10,
+                         n_training_samples=1000,
                          max_epochs=100)
     print(guesser.torch_qb_data.n_answers)
     train_dataloader = DataLoader(guesser.torch_qb_data, 
-                                batch_size = 20, 
+                                batch_size = 10, 
                                 shuffle=True, num_workers=1,
                                 collate_fn=TorchQBData.collate)
     guesser.train()

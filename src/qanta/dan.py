@@ -19,7 +19,7 @@ from qanta.torch import (BaseLogger, EarlyStopping, MaxEpochStopping,
 from qanta.torch.torch_dataset import TorchQBData, OverfitDataset
 from torch.autograd import Variable
 from torch.nn import functional as F
-from torch.optim import Adam, lr_scheduler
+from torch.optim import Adam, Adamax, lr_scheduler
 from torch.utils.data import DataLoader
 from tqdm import tqdm
 
@@ -139,14 +139,16 @@ class DanGuesser(object):
                  batch_size=5,
                  max_epochs=1,
                  grad_clip=5,
-                 n_training_samples=None):
+                 n_training_samples=None,
+                 split_sentences=False):
         # TODO: initialize with DAN model 
         # (Remove this once saving and dummy model is no longer needed)
         self.dan_embed = DanEmbedding(pretrained_fp)
         self.torch_qb_data = TorchQBData(quizbowl_dataset, 
                                          stoi = self.dan_embed.stoi, 
                                          pad_index=self.dan_embed.pad_index,
-                                         n_samples=n_training_samples)
+                                         n_samples=n_training_samples,
+                                         split_sentences=split_sentences)
         self.model = DanModel(embedding=self.dan_embed, 
                     embed_dim=self.dan_embed.embed_dim, 
                     n_classes=self.torch_qb_data.n_answers)        # TODO:
@@ -156,7 +158,7 @@ class DanGuesser(object):
         self.is_train = True
         self.gradient_clip = grad_clip
 
-        self.optimizer = Adam(self.model.parameters(), lr=0.01)
+        self.optimizer = Adam(self.model.parameters(), lr = 0.01)
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=5, verbose=True, mode='max')
 
@@ -179,7 +181,7 @@ class DanGuesser(object):
         temp_prefix = get_tmp_filename()
         self.model_file = f'{temp_prefix}.pt'
         manager = TrainingManager([
-            BaseLogger(log_func=log.info), TerminateOnNaN(), EarlyStopping(monitor='test_acc', patience=10, verbose=1),
+            BaseLogger(log_func=log.info), TerminateOnNaN(), EarlyStopping(monitor='test_acc', patience=100, verbose=1),
             MaxEpochStopping(self.max_epochs), ModelCheckpoint(create_save_model(self.model), self.model_file, monitor='test_acc')
         ])
 
