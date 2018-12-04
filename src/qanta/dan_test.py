@@ -75,12 +75,19 @@ def run():
         DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
 
     dataset = QuizBowlDataset(guesser_train=True)
-    n_answers = dataset.n_answers
-    guesser = DanGuesser(pretrained_weights=vectors,
-                        n_answers = n_answers,
-                        max_epochs=100,
-                        batch_size=30,
-                        lr=0.01)
+
+    guesser = DanGuesser(self, 
+                 dataset.answers,
+                 pretrained_weights=PRETRAINED_FP,
+                 batch_size=5,
+                 max_epochs=1,
+                 grad_clip=5,
+                 lr = 0.01,
+                 patience=100,
+                 embed_dim=None,
+                 vocab_size=None,
+                 n_hidden_units=50,
+                 nn_dropout=0.5)
 
     tr_qs, tr_pages, _ = dataset.training_data()
     te_qs, te_pages, _ = dataset.test_data()

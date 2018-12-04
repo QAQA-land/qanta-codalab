@@ -1,3 +1,9 @@
+'''TODOS:
+make sure all of the refactored inits work
+test save and load functinos (Jason?)
+'''
+
+
 import json
 import pickle
 import tempfile
@@ -76,15 +82,22 @@ class DanEmbedding(nn.Module):
 
 ''' DAN '''
 class DanModel(nn.Module):
-    def __init__(self, embedding, embed_dim,  n_classes, n_hidden_units=50, nn_dropout=.5, pretrained=True):
+    def __init__(self,
+                 embed_dim,
+                 vocab_size, 
+                 n_classes, 
+                 n_hidden_units, 
+                 nn_dropout,
+                 pretrained_weights=None):
         super(DanModel, self).__init__()
         log.info('loading embeddings')
 
         self.n_classes = n_classes
         self.n_hidden_units = n_hidden_units
         self.nn_dropout = nn_dropout
-        self.embedding = embedding
         self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+
         self.linear1 = nn.Linear(self.embed_dim, n_hidden_units)
         self.linear2 = nn.Linear(n_hidden_units, n_classes)
         self.softmax = nn.Softmax(dim=1)
@@ -96,11 +109,16 @@ class DanModel(nn.Module):
             #nn.Dropout(p=self.nn_dropout),
             self.linear2,
         )
-        # if pretrained:
-        #     
-        # else:
-        #     self.embeddings = nn.Embedding(self.vocab_size, self.emb_dim, padding_idx=0)
-        # pass
+
+        self.embedding = None
+
+        if pretrained_weights:
+            self.embedding = nn.Embedding.from_pretrained(self.pretrained_weights)
+        else if vocab_size != None and embed_dim != None:
+            self.embedding = nn.Embedding(self.vocab_size, self.embed_dim, padding_idx=0)
+        else:
+            raise ValueError('Pretrained weights, vocab_size, and embed_dim were all set to None')
+        pass
     
     def forward(self, input_text, text_len, is_prob=False):
         """
@@ -124,28 +142,42 @@ class DanModel(nn.Module):
 
 class DanGuesser(object):
     def __init__(self, 
-                 pretrained_weights,
-                 n_answers,
+                 answers,
+                 pretrained_weights=None,
                  batch_size=5,
                  max_epochs=1,
                  grad_clip=5,
-                 n_training_samples=None,
                  lr = 0.01,
-                 patience=100):
-        # TODO: initialize with DAN model 
-        # (Remove this once saving and dummy model is no longer needed)
-        self.n_answers = n_answers
-        self.dan_embed = DanEmbedding(pretrained_weights)
-        self.model = DanModel(embedding=self.dan_embed, 
-                    embed_dim=self.dan_embed.embed_dim, 
-                    n_classes=self.n_answers)
-
+                 patience=100,
+                 embed_dim=None,
+                 vocab_size=None,
+                 n_hidden_units=50,
+                 nn_dropout=0.5):
+        # Required params for initialization
+        self.answers = answers
+        self.pretrained_weights = pretrained_aweights
         self.batch_size = batch_size
         self.max_epochs = max_epochs
-        self.patience = patience
-        self.is_train = True
-        self.gradient_clip = grad_clip
+        self.grad_clip = grad_clip
         self.lr = lr
+        self.patience = patience
+
+        # Additional params for DanModel
+        self.embed_dim = embed_dim
+        self.vocab_size = vocab_size
+        self.n_hidden_units = n_hidden_units
+        self.nn_dropout = nn_dropout
+
+        # Internal parameters at initialization
+        self.n_answers = len(self.answers)
+        self.i_to_ans = dict(enumerate(self.answers))
+        self.model = DanModel(
+                         embed_dim=self.embed_dim,
+                         vocab_size=self.vocab_size, 
+                         n_classes=self.n_answers, 
+                         n_hidden_units=self.n_hidden_units, 
+                         nn_dropout=self.nn_dropout,
+                         pretrained_weights=self.pretrained_weights)
         self.optimizer = Adam(self.model.parameters(), lr=self.lr)
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=self.patience, verbose=True, mode='max')
@@ -263,12 +295,58 @@ class DanGuesser(object):
         return guesses
 
     def save(self):
-        log.info('This does not save')
+        shutil.copyfile(self.model_file, 'dan.pt')
+        with open(MODEL_PATH, 'wb') as f:
+            pickle.dump({
+                'answers' : self.answers,
+                'pretrained_weights' : self.pretrained_weights,
+                'batch_size' : self.batch_size,
+                'max_epochs' : self.max_epochs,
+                'grad_clip' : self.grad_clip,
+                'lr' : self.lr,
+                'patience' : self.patience,
+
+                # Internal parameters at initialization
+                'n_answers' : self.n_answers,
+                'i_to_ans' : self.i_to_ans,
+
+                #Dan Model parameters
+                'embed_dim' : self.embed_dim
+                'vocab_size' : self.vocab_size
+                'n_hidden_units' : self.n_hidden_units
+                'nn_dropout' : self.nn_dropout
+                    }, f)
         pass
 
     @classmethod
     def load(cls):
-        guesser = DanGuesser()
+        with open(MODEL_PATH, 'rb') as f:
+            params = pickle.load(f)
+
+        guesser = DanGuesser(amswers=params['answers'],
+                 pretrained_weights=params['pretrained_weights'],
+                 batch_size=params['batch_size'],
+                 max_epochs=params['max_epochs'],
+                 grad_clip=params['grad_clip'],
+                 lr=params['lr'],
+                 patience=params['patience'],
+                 embed_dim=params['embed_dim'],
+                 vocab_size=params['vocab_size'],
+                 n_hidden_units=params['n_hidden_units'],
+                 nn_dropout=params['nn_dropout'])
+
+        guesser.n_answers = params['n_answers']
+        guesser.i_to_ans = params['i_to_ans']
+        guesser.model = DanModel(
+                         embed_dim=guesser.embed_dim,
+                         vocab_size=guesser.vocab_size, 
+                         n_classes=guesser.n_answers, 
+                         n_hidden_units=guesser.n_hidden_units, 
+                         nn_dropout=guesser.nn_dropout,
+                         pretrained_weights=guesser.pretrained_weights)
+
+        guesser.model.load_state_dict(torch.load(
+            'dan.pt', map_location=lambda storage, loc: storage))
         return guesser
 
 
