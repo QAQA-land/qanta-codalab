@@ -1,9 +1,4 @@
-'''TODOS:
-make sure all of the refactored inits work
-test save and load functinos (Jason?)
-'''
-
-
+import shutil
 import json
 import pickle
 import tempfile
@@ -52,10 +47,10 @@ def get_tmp_filename(dir='/tmp'):
 class DanEmbedding(nn.Module):
     def __init__(self, pretrained_weights):
         super(DanEmbedding, self).__init__()
-        self.embedding_weights = pretrained_weights
-        self.embed = nn.Embedding.from_pretrained(self.embedding_weights)
-        self.embed_dim = self.embedding_weights.shape[1]
-        self.pad_index = 0
+        #self.embedding_weights = pretrained_weights
+        #self.embed = nn.Embedding.from_pretrained(self.embedding_weights)
+        #self.embed_dim = self.embedding_weights.shape[1]
+        #self.pad_index = 0
     
     @staticmethod
     def load_pretrained_weights(pretrained_fp):
@@ -112,12 +107,12 @@ class DanModel(nn.Module):
 
         self.embedding = None
 
-        if pretrained_weights:
-            self.embedding = nn.Embedding.from_pretrained(self.pretrained_weights)
-        else if vocab_size != None and embed_dim != None:
+        if not (pretrained_weights is None):  # if ptw != None (tensor doesn't compare nice to None)
+            self.embedding = nn.Embedding.from_pretrained(pretrained_weights)
+        elif vocab_size != None:
             self.embedding = nn.Embedding(self.vocab_size, self.embed_dim, padding_idx=0)
         else:
-            raise ValueError('Pretrained weights, vocab_size, and embed_dim were all set to None')
+            raise ValueError('Pretrained weights and vocab_size were both set to None')
         pass
     
     def forward(self, input_text, text_len, is_prob=False):
@@ -155,7 +150,7 @@ class DanGuesser(object):
                  nn_dropout=0.5):
         # Required params for initialization
         self.answers = answers
-        self.pretrained_weights = pretrained_aweights
+        self.pretrained_weights = pretrained_weights
         self.batch_size = batch_size
         self.max_epochs = max_epochs
         self.grad_clip = grad_clip
@@ -181,6 +176,8 @@ class DanGuesser(object):
         self.optimizer = Adam(self.model.parameters(), lr=self.lr)
         self.criterion = nn.CrossEntropyLoss()
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=self.patience, verbose=True, mode='max')
+        
+        self.model_file = None
 
     def train(self, train_dataset, val_dataset) -> None:
         log.info('Loading Quiz Bowl dataset')
@@ -256,7 +253,7 @@ class DanGuesser(object):
             if is_train:
                 batch_loss.backward()
                 torch.nn.utils.clip_grad_norm(self.model.parameters(), 
-                                              self.gradient_clip)
+                                              self.grad_clip)
                 self.optimizer.step()
 
             batch_accuracies.append(accuracy)
@@ -311,9 +308,9 @@ class DanGuesser(object):
                 'i_to_ans' : self.i_to_ans,
 
                 #Dan Model parameters
-                'embed_dim' : self.embed_dim
-                'vocab_size' : self.vocab_size
-                'n_hidden_units' : self.n_hidden_units
+                'embed_dim' : self.embed_dim,
+                'vocab_size' : self.vocab_size,
+                'n_hidden_units' : self.n_hidden_units,
                 'nn_dropout' : self.nn_dropout
                     }, f)
         pass
@@ -323,7 +320,7 @@ class DanGuesser(object):
         with open(MODEL_PATH, 'rb') as f:
             params = pickle.load(f)
 
-        guesser = DanGuesser(amswers=params['answers'],
+        guesser = DanGuesser(answers=params['answers'],
                  pretrained_weights=params['pretrained_weights'],
                  batch_size=params['batch_size'],
                  max_epochs=params['max_epochs'],

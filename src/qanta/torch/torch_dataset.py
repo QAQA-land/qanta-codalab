@@ -10,14 +10,17 @@ class TorchQBData(Dataset):
                 pages,
                 stoi_dict,
                 pad_index,
-                unk_index):
+                unk_index,
+                n_samples=None):
 
         self.qs, self.pages = questions, pages
+        assert(len(self.qs) == len(self.pages))
+        if n_samples != None:
+            self.qs = self.qs[:n_samples]
         self.answers = list(set(self.pages))
         self.n_answers = len(self.answers)
         self.i_to_ans = dict(enumerate(self.answers))
         self.ans_to_i = dict((n, i) for i, n in  enumerate(self.answers))
-        assert(len(self.qs) == len(self.pages))
         self.stoi_ = stoi_dict
         assert(pad_index == 0)
         assert(stoi_dict['<PAD>'] == pad_index)

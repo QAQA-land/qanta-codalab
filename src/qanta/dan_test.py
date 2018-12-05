@@ -20,6 +20,72 @@ def pretrained():
     print(dan.embed_dim)
 
 @cli.command()
+def saveload():
+
+    # Load data, initialize guesser, model
+    print('Loading data')
+    vocab, stoi_, vectors, pad_index, unk_index = \
+        DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
+
+    dataset = QuizBowlDataset(guesser_train=True)
+    tr_qs, tr_pages, _ = dataset.training_data()
+    te_qs, te_pages, _ = dataset.test_data()
+    train_dataset = TorchQBData(tr_qs, tr_pages, stoi_, pad_index, unk_index, n_samples=100)
+    val_dataset = TorchQBData(te_qs, te_pages, stoi_, pad_index, unk_index, n_samples=100)
+
+    print('Initializing guesser')
+    guesser1 = DanGuesser(dataset.answers,
+                 pretrained_weights=vectors,
+                 batch_size=20,
+                 max_epochs=1,
+                 grad_clip=5,
+                 lr = 0.01,
+                 patience=100,
+                 embed_dim=100,
+                 vocab_size=None,
+                 n_hidden_units=50,
+                 nn_dropout=0.5)
+
+    guesser2 = DanGuesser(dataset.answers,
+                 pretrained_weights=vectors,
+                 batch_size=20,
+                 max_epochs=1,
+                 grad_clip=5,
+                 lr = 0.01,
+                 patience=100,
+                 embed_dim=100,
+                 vocab_size=None,
+                 n_hidden_units=50,
+                 nn_dropout=0.5)
+
+    print('Short training')
+    guesser1.train(train_dataset, val_dataset)
+    guesser2.train(train_dataset, val_dataset)
+
+    # Run forward loop on untrained model 
+    train_dataloader = DataLoader(train_dataset, batch_size = 5, shuffle=True, num_workers=1, 
+                                collate_fn=TorchQBData.collate)
+    for batch in train_dataloader:
+        print('* Forward')
+        input_text = batch['text']
+        lengths = batch['len']
+        labels = batch['labels']
+        out1 = guesser1.model(input_text, lengths)
+        out2 = guesser2.model(input_text, lengths)
+        print('Initial model output: ', out1)
+        print('Other model output', out2)  # check out1 != out2
+
+        print('Saving initial model')
+        guesser1.save()
+
+        print('Loading')
+        loaded_dan = DanGuesser.load()
+
+        loaded_out = loaded_dan.model(input_text, lengths)
+        print('Loaded model output: ', loaded_out)  # check loaded_out == out1
+        break
+
+@cli.command()
 def dataloader():
     vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
     dataset = QuizBowlDataset(guesser_train=True)
@@ -76,15 +142,14 @@ def run():
 
     dataset = QuizBowlDataset(guesser_train=True)
 
-    guesser = DanGuesser(self, 
-                 dataset.answers,
-                 pretrained_weights=PRETRAINED_FP,
+    guesser = DanGuesser(dataset.answers,
+                 pretrained_weights=vectors,
                  batch_size=5,
                  max_epochs=1,
                  grad_clip=5,
                  lr = 0.01,
                  patience=100,
-                 embed_dim=None,
+                 embed_dim=100,
                  vocab_size=None,
                  n_hidden_units=50,
                  nn_dropout=0.5)
