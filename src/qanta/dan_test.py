@@ -20,7 +20,7 @@ def pretrained():
     print(dan.embed_dim)
 
 @cli.command()
-def saveload():
+def saveload():  #INITS NOT UPDATED
 
     # Load data, initialize guesser, model
     print('Loading data')
@@ -86,6 +86,57 @@ def saveload():
         break
 
 @cli.command()
+def guesscheck():
+
+    # Load data, initialize guesser, model
+    print('Loading data')
+    vocab, stoi_, vectors, pad_index, unk_index = \
+        DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
+
+    dataset = QuizBowlDataset(guesser_train=True)
+    tr_qs, tr_pages, _ = dataset.training_data()
+    te_qs, te_pages, _ = dataset.test_data()
+    train_dataset = TorchQBData(tr_qs, tr_pages, stoi_, pad_index, unk_index, n_samples=100)
+    val_dataset = TorchQBData(te_qs, te_pages, stoi_, pad_index, unk_index, n_samples=100)
+    print(train_dataset.qs)
+
+    print('Initializing guesser')
+    guesser1 = DanGuesser(dataset.answers,
+                 pretrained_weights=vectors,
+                 stoi=stoi_,
+                 batch_size=20,
+                 max_epochs=1,
+                 grad_clip=5,
+                 lr = 0.01,
+                 patience=100,
+                 embed_dim=100,
+                 vocab_size=None,
+                 n_hidden_units=50,
+                 nn_dropout=0.5)
+
+    print('Short training')
+    guesser1.train(train_dataset, val_dataset)
+
+    practice_question1 = '''This constellation contains the Horsehead Nebula and 
+        the brightest red supergiant [“super-giant”] in the night sky. An asterism 
+        [AST-uh-RIZM] in this constellation is made up of Alnitak [AL-nih-tak], 
+        Alnilam [al-NIH-lam], and Mintaka [min-TAH-kah]. Rigel [RYE-jel] and 
+        Betelgeuse [“beetle-juice”] are in—for 10 points—what constellation in 
+        the shape of a hunter wearing a “belt?”'''
+    practice_question2 = '''In this country, a ”lion monument” lies in the cliffs 
+        surrounding Lake Lucerne [loo-SERN], which borders three cantons [“CAN”-tunz]. 
+        This countryʹs southern border with Italy extends through the (*) Matterhorn 
+        mountain. Bern is the capital of—for 10 points—what Alpine [“AL-pine”] 
+        country whose most populous city is Zürich [ZOO-rik]?'''
+
+    print('Guess something!')
+    questions = [practice_question1, practice_question2]
+    guesses = guesser1.guess(questions, 10)
+    for i, guess in enumerate(guesses):
+        print('Question:', questions[i])
+        print('Guesses:', guess)
+
+@cli.command()
 def dataloader():
     vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
     dataset = QuizBowlDataset(guesser_train=True)
@@ -104,7 +155,7 @@ def dataloader():
         break
 
 @cli.command()
-def forward():
+def forward():  # INITS NOT UPDATED
     vocab, stoi_, vectors, pad_index, unk_index = DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
 
     dataset = QuizBowlDataset(guesser_train=True)
@@ -136,7 +187,7 @@ def forward():
         break
 
 @cli.command()
-def run():
+def run():  # INITS NOT UPDATED
     vocab, stoi_, vectors, pad_index, unk_index = \
         DanEmbedding.load_pretrained_weights(PRETRAINED_FP)
 

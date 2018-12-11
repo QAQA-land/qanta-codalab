@@ -1,7 +1,7 @@
 from torch.utils.data import Dataset
 from qanta.dataset import QuizBowlDataset
-from nltk.tokenize import word_tokenize
 import torch
+import string
 
 
 class TorchQBData(Dataset):
@@ -38,8 +38,14 @@ class TorchQBData(Dataset):
 
     def __getitem__(self, idx):
         sentences_concatenated = ' '.join(self.qs[idx])
-        tokens = word_tokenize(sentences_concatenated)
-        ex = (tokens, self.pages[idx])
+
+        # remove punctuation
+        translator = str.maketrans('', '', string.punctuation)
+        sentence = sentences_concatenated.translate(translator)
+
+        # split and lowercase
+        split_sent = [w.lower() for w in sentence.split()]
+        ex = (split_sent, self.pages[idx])
         return self.vectorize(ex)
 
     def vectorize(self, ex):

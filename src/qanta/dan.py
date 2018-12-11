@@ -8,6 +8,7 @@ from os import path
 from typing import List, Optional, Tuple
 
 import numpy as np
+import string
 import gensim
 import click
 import torch
@@ -139,6 +140,7 @@ class DanGuesser(object):
     def __init__(self, 
                  answers,
                  pretrained_weights=None,
+                 stoi=None,
                  batch_size=5,
                  max_epochs=1,
                  grad_clip=5,
@@ -178,6 +180,7 @@ class DanGuesser(object):
         self.scheduler = lr_scheduler.ReduceLROnPlateau(self.optimizer, patience=self.patience, verbose=True, mode='max')
         
         self.model_file = None
+        self.stoi_ = stoi  # How do we do stoi if training own embeddings?
 
     def train(self, train_dataset, val_dataset) -> None:
         log.info('Loading Quiz Bowl dataset')
@@ -262,6 +265,48 @@ class DanGuesser(object):
         epoch_end = time.time()
 
         return np.mean(batch_accuracies), np.mean(batch_losses), epoch_end - epoch_start
+
+    def stoi(self, s):
+        if s in self.stoi_:
+            return self.stoi_[s]
+        else:
+            return self.stoi_['<UNK>']
+    
+    def vectorize(self, sentence):
+        """
+        vectorize a single example based on the string to index (stoi) dict. 
+
+        Keyword arguments:
+        exs: list of input questions-type pairs
+        ex: tokenized question sentence (list)
+        label: type of question sentence
+
+        Output:  vectorized sentence(python list) and label(int)
+        e.g. ['text', 'test', 'is', 'fun'] -> [0, 2, 3, 4]
+        """
+        # remove punctuation
+        translator = str.maketrans('', '', string.punctuation)
+        sentence = sentence.translate(translator)
+
+        # split and lowercase
+        split_sent = [w.lower() for w in sentence.split()]
+
+        print(split_sent)
+        vec_text = [self.stoi(w) for w in split_sent]
+        return vec_text
+
+    def collate(self, batch):
+        question_len = list()
+        for ex in batch:
+            question_len.append(len(ex))
+        # NOTE: pad index is asserted to 0
+        x1 = torch.LongTensor(len(question_len), max(question_len)).zero_()
+        for i in range(len(question_len)):
+            question_text = batch[i]
+            vec = torch.LongTensor(question_text)
+            x1[i, :len(question_text)].copy_(vec)
+        q_batch = {'text': x1, 'len': torch.FloatTensor(question_len)}
+        return q_batch
             
     def guess(self, questions: List[str], max_n_guesses: Optional[int]):
         if len(questions) == 0:
@@ -281,7 +326,10 @@ class DanGuesser(object):
         if len(questions) == 0:
             return []
         guesses = []
-        out = self.model(questions)
+        examples = [self.vectorize(question) for question in questions]
+        print(examples)
+        batch = self.collate(examples)
+        out = self.model(batch['text'], batch['len'])
         probs = F.softmax(out).data.cpu().numpy()
         n_examples = probs.shape[0]
         preds = np.argsort(-probs, axis=1)
