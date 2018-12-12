@@ -184,6 +184,7 @@ def evaluate(input_dir, output_dir, score_dir, char_step_size, hostname,
         elog.info('Computing curve score of results')
         curve_score = CurveScore(curve_pkl=curve_pkl)
         first_acc = []
+        third_acc = []
         end_acc = []
         ew = []
         ew_opt = []
@@ -195,12 +196,17 @@ def evaluate(input_dir, output_dir, score_dir, char_step_size, hostname,
                 if g['sent_index'] == 0:
                     first_guess = g['guess']
                     break
+            for g in guesses:
+                if g['sent_index'] == 3:
+                    third_guess = g['guess']
+            third_acc.append(third_guess == answer)
             first_acc.append(first_guess == answer)
             end_acc.append(guesses[-1]['guess'] == answer)
             ew.append(curve_score.score(guesses, question))
             ew_opt.append(curve_score.score_optimal(guesses, question))
         eval_out = {
             'first_acc': sum(first_acc) * 1.0 / len(first_acc),
+            'third_acc': sum(third_acc) * 1.0 / len(third_acc),
             'end_acc': sum(end_acc) * 1.0 / len(end_acc),
             'expected_wins': sum(ew) * 1.0 / len(ew),
             'expected_wins_optimal': sum(ew_opt) * 1.0 / len(ew_opt),

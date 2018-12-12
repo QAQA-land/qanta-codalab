@@ -3,5 +3,5 @@ python ../evaluate.py \
     --wait 5 \
     --hostname 0.0.0.0 \
     --norun-web \
-    --char_step_size 600 \
+    --char_step_size 100 \
     ../src/data/qanta.dev.2018.04.18.json
