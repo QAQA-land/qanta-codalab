@@ -209,9 +209,9 @@ def run():  # INITS NOT UPDATED
     te_qs, te_pages, _ = dataset.test_data()
 
     
-    # N_SAMPLE = 10
-    # tr_qs, tr_pages = tr_qs[:N_SAMPLE], tr_pages[:N_SAMPLE]
-    # te_qs, te_pages = te_qs[:N_SAMPLE], te_pages[:N_SAMPLE]
+    N_SAMPLE = 10
+    tr_qs, tr_pages = tr_qs[:N_SAMPLE], tr_pages[:N_SAMPLE]
+    te_qs, te_pages = te_qs[:N_SAMPLE], te_pages[:N_SAMPLE]
 
     
 
