@@ -121,8 +121,12 @@ def get_answer_batch(url, questions, char_step_size, batch_size):
         for char_idx in range(1, max_len + char_step_size, char_step_size):
             query = {'questions': []}
             for i, q in enumerate(qs):
-                query['questions'].append(
-                    get_question_query(qids[i], q, char_idx))
+                if char_idx == 1:
+                    query['questions'].append(
+                        get_question_query(qids[i], q, q['tokenizations'][0][1]))
+                else:
+                    query['questions'].append(
+                        get_question_query(qids[i], q, char_idx))
             resp = requests.post(url, json=query).json()
             for i, r in enumerate(resp):
                 q = query['questions'][i]
@@ -188,7 +192,7 @@ def evaluate(input_dir, output_dir, score_dir, char_step_size, hostname,
             answer = question['page']
             first_guess = None
             for g in guesses:
-                if g['sent_index'] == 1:
+                if g['sent_index'] == 0:
                     first_guess = g['guess']
                     break
             first_acc.append(first_guess == answer)
