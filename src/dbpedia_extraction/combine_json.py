@@ -8,11 +8,12 @@ def find(s, ch):
 
 def main():
     parser = argparse.ArgumentParser(description="Merges json files")
-    parser.add_argument("-f","--files", help="json files (no spaces, seperate by comma)",required=True)
+    parser.add_argument("-f","--files", help="json files space separated", nargs='*',required=True)
     parser.add_argument("-o","--out_file", help="Output file",required=True)
     args = parser.parse_args()
 
-    files = args.files.split(',')
+    files = args.files
+    print(files)
     counter = 0
     main_json = None
     json_files = {}

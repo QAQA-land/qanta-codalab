@@ -138,6 +138,7 @@ def get_answer_batch(url, questions, char_step_size, batch_size):
 def check_port(hostname, port):
     pass
 
+import os
 
 @click.command()
 @click.argument('input_dir')
@@ -150,9 +151,14 @@ def check_port(hostname, port):
 @click.option('--curve-pkl', default='curve_pipeline.pkl')
 @click.option('--retries', default=20)
 @click.option('--retry-delay', default=3)
+@click.option('--output_prefix', default=None)
 def evaluate(input_dir, output_dir, score_dir, char_step_size, hostname,
-             norun_web, wait, curve_pkl, retries, retry_delay):
+             norun_web, wait, curve_pkl, retries, retry_delay, output_prefix):
     try:
+        if output_prefix:
+            output_dir = os.path.join(output_prefix, output_dir)
+            score_dir = os.path.join(output_prefix, score_dir)
+
         if not norun_web:
             web_proc = start_server()
 
@@ -196,17 +202,12 @@ def evaluate(input_dir, output_dir, score_dir, char_step_size, hostname,
                 if g['sent_index'] == 0:
                     first_guess = g['guess']
                     break
-            for g in guesses:
-                if g['sent_index'] == 3:
-                    third_guess = g['guess']
-            third_acc.append(third_guess == answer)
             first_acc.append(first_guess == answer)
             end_acc.append(guesses[-1]['guess'] == answer)
             ew.append(curve_score.score(guesses, question))
             ew_opt.append(curve_score.score_optimal(guesses, question))
         eval_out = {
             'first_acc': sum(first_acc) * 1.0 / len(first_acc),
-            'third_acc': sum(third_acc) * 1.0 / len(third_acc),
             'end_acc': sum(end_acc) * 1.0 / len(end_acc),
             'expected_wins': sum(ew) * 1.0 / len(ew),
             'expected_wins_optimal': sum(ew_opt) * 1.0 / len(ew_opt),

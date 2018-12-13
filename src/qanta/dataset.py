@@ -107,7 +107,7 @@ class QantaDatabase:
 
 
 class QuizBowlDataset:
-    def __init__(self, *, guesser_train=False, buzzer_train=False):
+    def __init__(self, *, guesser_train=False, buzzer_train=False, mapped_questions = QANTA_MAPPED_DATASET_PATH):
         """
         Initialize a new quiz bowl data set
         """
@@ -118,7 +118,7 @@ class QuizBowlDataset:
         if guesser_train and buzzer_train:
             print('Using QuizBowlDataset with guesser and buzzer training data, make sure you know what you are doing!')
 
-        self.db = QantaDatabase()
+        self.db = QantaDatabase(dataset_path = mapped_questions)
         self.guesser_train = guesser_train
         self.buzzer_train = buzzer_train
 

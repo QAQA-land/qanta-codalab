@@ -81,8 +81,8 @@ class TfidfGuesser:
             }, f)
 
     @classmethod
-    def load(cls):
-        with open(MODEL_PATH, 'rb') as f:
+    def load(cls, model_path=MODEL_PATH):
+        with open(model_path, 'rb') as f:
             params = pickle.load(f)
             guesser = TfidfGuesser()
             guesser.tfidf_vectorizer = params['tfidf_vectorizer']
@@ -91,8 +91,8 @@ class TfidfGuesser:
             return guesser
 
 
-def create_app(enable_batch=True):
-    tfidf_guesser = TfidfGuesser.load()
+def create_app(enable_batch=True, model_path=MODEL_PATH):
+    tfidf_guesser = TfidfGuesser.load(model_path=model_path)
     app = Flask(__name__)
 
     @app.route('/api/1.0/quizbowl/act', methods=['POST'])
@@ -130,20 +130,22 @@ def cli():
 @click.option('--host', default='0.0.0.0')
 @click.option('--port', default=4861)
 @click.option('--disable-batch', default=False, is_flag=True)
-def web(host, port, disable_batch):
+@click.option('--model_path', default=MODEL_PATH)
+def web(host, port, disable_batch, model_path):
     """
     Start web server wrapping tfidf model
     """
-    app = create_app(enable_batch=not disable_batch)
+    app = create_app(enable_batch=not disable_batch, model_path=model_path)
     app.run(host=host, port=port, debug=False)
 
 
 @cli.command()
-def train():
+@click.option('--mapped_questions', default='data/qanta.mapped.2018.04.18.json')
+def train(mapped_questions):
     """
     Train the tfidf model, requires downloaded data and saves to models/
     """
-    dataset = QuizBowlDataset(guesser_train=True)
+    dataset = QuizBowlDataset(guesser_train=True, mapped_questions=mapped_questions)
     tfidf_guesser = TfidfGuesser()
     tfidf_guesser.train(dataset.training_data())
     tfidf_guesser.save()
